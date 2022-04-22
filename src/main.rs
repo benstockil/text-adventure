@@ -6,7 +6,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::{
-    collections::{HashMap, VecDeque},
     error::Error,
     io,
     iter,
@@ -22,7 +21,7 @@ use tui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use text_adventure::{parser::story_parser, StoryEvent};
+use text_adventure::{StoryEvent, AppData};
 
 enum InputMode {
     Disabled,
@@ -47,11 +46,6 @@ impl Default for UpdateState {
     }
 }
 
-
-struct AppData {
-    story: VecDeque<StoryEvent>,
-    game_store: HashMap<String, String>,
-}
 #[derive(Default)]
 struct AppUI {
     input: String,
@@ -63,18 +57,6 @@ struct AppUI {
     label: String,
 }
 
-
-impl Default for AppData {
-    fn default() -> AppData {
-        let text = include_str!("../story/entry.story");
-        let story = story_parser::story(text).unwrap();
-
-        AppData {
-            story: VecDeque::from(story),
-            game_store: HashMap::new(),
-        }
-    }
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     // setup terminal

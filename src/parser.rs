@@ -1,13 +1,13 @@
 use crate::StoryEvent;
 use peg;
 
-// FIX: Parser cannot handle commands at EOF 
-
 peg::parser! { pub grammar story_parser() for str {
     // Define whitespace
     rule _ = quiet!{[' ' | '\t']+}
 
-    rule event() -> StoryEvent = s:command() / s:text()
+    rule eof() = ![_]
+
+    rule event() -> StoryEvent = s:command() / s:text() / expected!("event")
     
     // Commands are uppercase words preceded by a plus sign, and can have arguments
     rule command() -> StoryEvent
@@ -19,10 +19,12 @@ peg::parser! { pub grammar story_parser() for str {
                 _ => todo!(),
             }
         }
+        / expected!("command")
 
     // Arguments terminate at whitespace / newline
     rule arg() -> &'input str
         = ":" _? arg:$((!("\n"/_)  [_])+) { arg }
+        / expected!("argument")
 
     // rule args() -> Vec<String> 
     //     = args:( $([_]+) ++ (_* "," _*)) { args }
@@ -30,7 +32,8 @@ peg::parser! { pub grammar story_parser() for str {
     // Text must terminate before the next command (plus sign)
     rule text() -> StoryEvent
         = t:$((!"\n+" [_])+) { StoryEvent::Text(t.to_owned()) }
+        / expected!("text")
 
     pub rule story() -> Vec<StoryEvent>
-        = (event() ** ("\n"+))
+        = l:(event() ** ("\n"+)) (_/"\n")* { l }
 }}

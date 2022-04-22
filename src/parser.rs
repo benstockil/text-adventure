@@ -8,10 +8,10 @@ peg::parser! { pub grammar story_parser() for str {
     rule eof() = ![_]
 
     rule event() -> StoryEvent = s:command() / s:text() / expected!("event")
-    
+
     // Commands are uppercase words preceded by a plus sign, and can have arguments
     rule command() -> StoryEvent
-        = "+" cmd:$(['A'..='Z']+) _? arg:arg()? { 
+        = "+" cmd:$(['A'..='Z']+) _? arg:arg()? {
             match cmd {
                 "PAUSE" => StoryEvent::Pause,
                 "CLEAR" => StoryEvent::Clear,
@@ -26,7 +26,7 @@ peg::parser! { pub grammar story_parser() for str {
         = ":" _? arg:$((!("\n"/_)  [_])+) { arg }
         / expected!("argument")
 
-    // rule args() -> Vec<String> 
+    // rule args() -> Vec<String>
     //     = args:( $([_]+) ++ (_* "," _*)) { args }
 
     // Text must terminate before the next command (plus sign)

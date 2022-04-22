@@ -1,34 +1,33 @@
+#![warn(clippy::all, clippy::pedantic)]
+
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{collections::HashMap, error::Error, io, iter::{self, Extend}, time::Duration};
+use std::{
+    collections::{HashMap, VecDeque},
+    error::Error,
+    io,
+    iter,
+    time::Duration,
+};
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    text::{Span, Spans, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    style::{Color, Style},
+    text::{Span, Spans},
+    widgets::{Block, List, ListItem, Paragraph},
     Frame, Terminal,
 };
 use unicode_width::UnicodeWidthStr;
 
-mod parser;
-use parser::story_parser;
+use text_adventure::{parser::story_parser, StoryEvent};
 
 enum InputMode {
     Disabled,
     Input,
     Pause,
-}
-
-#[derive(Debug)]
-pub enum StoryEvent {
-    Text(String),
-    Input(String),
-    Pause,
-    Clear,
 }
 
 enum UpdateState {
@@ -39,8 +38,7 @@ enum UpdateState {
 }
 
 struct App {
-    story: Vec<StoryEvent>,
-    position: usize,
+    story: VecDeque<StoryEvent>,
     input: String,
     input_mode: InputMode,
     output: Vec<String>,
@@ -51,14 +49,14 @@ struct App {
     label: String,
 }
 
+
 impl Default for App {
     fn default() -> App {
         let text = include_str!("../story/entry.story");
-        let story = story_parser::story(&text).unwrap();
+        let story = story_parser::story(text).unwrap();
 
         App {
-            story,
-            position: 0,
+            story: VecDeque::from(story),
             input: String::new(),
             output: Vec::new(),
             response_progress: 0,
@@ -66,7 +64,7 @@ impl Default for App {
             input_mode: InputMode::Disabled,
             game_store: HashMap::new(),
             update: UpdateState::Update,
-            label: "".into(),
+            label: String::default(),
         }
     }
 }
@@ -93,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        println!("{:?}", err)
+        println!("{:?}", err);
     }
 
     Ok(())
@@ -106,7 +104,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                 Some(event) => {
                     match event {
                         StoryEvent::Text(t) => {
-                            app.current_response = t.to_owned();
+                            app.current_response = t.clone();
                             app.input_mode = InputMode::Disabled;
                             app.update = UpdateState::Responding;
                         }
@@ -183,6 +181,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -203,15 +202,14 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         _ => {}
     }
 
+
     let current = app.current_response[0..app.response_progress].to_owned();
     let output = List::new(
         app.output
             .iter()
-            .chain(
-                iter::once(&current)
-            )
+            .chain(iter::once(&current))
             .map(|t| ListItem::new(t.as_ref()))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>(),
     );
 
     f.render_widget(output, chunks[0]);

@@ -3,13 +3,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{
-    collections::HashMap,
-    error::Error,
-    fs::File,
-    io::{self, Read},
-    time::Duration,
-};
+use std::{collections::HashMap, error::Error, io, iter::{self, Extend}, time::Duration};
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
@@ -40,7 +34,8 @@ pub enum StoryEvent {
 enum UpdateState {
     Update,
     Wait,
-    Handle,
+    HandleInput,
+    Responding,
 }
 
 struct App {
@@ -49,6 +44,8 @@ struct App {
     input: String,
     input_mode: InputMode,
     output: Vec<String>,
+    current_response: String,
+    response_progress: usize,
     game_store: HashMap<String, String>,
     update: UpdateState,
     label: String,
@@ -64,6 +61,8 @@ impl Default for App {
             position: 0,
             input: String::new(),
             output: Vec::new(),
+            response_progress: 0,
+            current_response: String::new(),
             input_mode: InputMode::Disabled,
             game_store: HashMap::new(),
             update: UpdateState::Update,
@@ -107,7 +106,9 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                 Some(event) => {
                     match event {
                         StoryEvent::Text(t) => {
-                            app.output.push(t.clone());
+                            app.current_response = t.to_owned();
+                            app.input_mode = InputMode::Disabled;
+                            app.update = UpdateState::Responding;
                         }
                         StoryEvent::Input(_) => {
                             app.input_mode = InputMode::Input;
@@ -128,10 +129,21 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                 }
             },
 
-            UpdateState::Handle => {
+            UpdateState::HandleInput => {
                 app.game_store
                     .insert(app.label.clone(), app.input.drain(..).collect());
                 app.update = UpdateState::Update;
+            }
+
+            UpdateState::Responding => {
+                if app.response_progress == app.current_response.len() {
+                    app.output.push(app.current_response.clone());
+                    app.response_progress = 0;
+                    app.update = UpdateState::Update;
+                } else {
+                    // FIX: No time control for responses; one char every frame
+                    app.response_progress += 1;
+                }
             }
 
             UpdateState::Wait => {}
@@ -149,7 +161,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                     InputMode::Input => match key.code {
                         KeyCode::Enter => {
                             app.input_mode = InputMode::Disabled;
-                            app.update = UpdateState::Handle;
+                            app.update = UpdateState::HandleInput;
                         }
                         KeyCode::Char(c) => {
                             app.input.push(c);
@@ -191,15 +203,16 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         _ => {}
     }
 
-    let messages: Vec<ListItem> = app
-        .output
-        .iter()
-        .enumerate()
-        .map(|(i, m)| {
-            let content = vec![Spans::from(Span::raw(format!("{}: {}", i, m)))];
-            ListItem::new(content)
-        })
-        .collect();
-    let messages = List::new(messages).block(Block::default());
-    f.render_widget(messages, chunks[0]);
+    let current = app.current_response[0..app.response_progress].to_owned();
+    let output = List::new(
+        app.output
+            .iter()
+            .chain(
+                iter::once(&current)
+            )
+            .map(|t| ListItem::new(t.as_ref()))
+            .collect::<Vec<_>>()
+    );
+
+    f.render_widget(output, chunks[0]);
 }

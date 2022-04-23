@@ -12,5 +12,5 @@ tui = "0.17.0"
 unicode-width = "0.1.9"
 
 [[bin]]
-name = "text_adventure"
-path = "src/main.rs"
+name = "text_adventure_tui"
+path = "src/tui_client.rs"

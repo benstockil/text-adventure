@@ -1,8 +1,7 @@
 #![warn(clippy::all, clippy::pedantic)]
 
-use std::collections::VecDeque;
-use std::collections::HashMap;
 use crate::parser::story_parser::story;
+use std::collections::{HashMap, VecDeque};
 
 pub mod parser;
 
@@ -18,6 +17,7 @@ pub struct AppData {
     pub story: VecDeque<StoryEvent>,
     pub game_store: HashMap<String, String>,
 }
+
 impl Default for AppData {
     fn default() -> AppData {
         let text = include_str!("../story/entry.story");

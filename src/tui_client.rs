@@ -5,12 +5,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{
-    error::Error,
-    io,
-    iter,
-    time::Duration,
-};
+use std::{error::Error, io, iter, time::Duration};
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
@@ -21,13 +16,14 @@ use tui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use text_adventure::{StoryEvent, AppData};
+use text_adventure::{AppData, StoryEvent};
 
 enum InputMode {
     Disabled,
     Input,
     Pause,
 }
+
 impl Default for InputMode {
     fn default() -> Self {
         Self::Disabled
@@ -40,6 +36,7 @@ enum UpdateState {
     HandleInput,
     Responding,
 }
+
 impl Default for UpdateState {
     fn default() -> Self {
         Self::Update
@@ -47,7 +44,7 @@ impl Default for UpdateState {
 }
 
 #[derive(Default)]
-struct AppUI {
+struct AppUi {
     input: String,
     input_mode: InputMode,
     output: Vec<String>,
@@ -56,7 +53,6 @@ struct AppUI {
     update: UpdateState,
     label: String,
 }
-
 
 fn main() -> Result<(), Box<dyn Error>> {
     // setup terminal
@@ -68,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // create app and run it
     let app_data = AppData::default();
-    let app_ui = AppUI::default();
+    let app_ui = AppUi::default();
     let res = run_app(&mut terminal, app_ui, app_data);
 
     // restore terminal
@@ -87,37 +83,40 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app_ui: AppUI, mut app_data: AppData) -> io::Result<()> {
+fn run_app<B: Backend>(
+    terminal: &mut Terminal<B>,
+    mut app_ui: AppUi,
+    mut app_data: AppData,
+) -> io::Result<()> {
     loop {
         match app_ui.update {
             UpdateState::Update => match app_data.story.pop_front() {
-                Some(event) => {
-                    match event {
-                        StoryEvent::Text(t) => {
-                            app_ui.current_response = t.clone();
-                            app_ui.input_mode = InputMode::Disabled;
-                            app_ui.update = UpdateState::Responding;
-                        }
-                        StoryEvent::Input(_) => {
-                            app_ui.input_mode = InputMode::Input;
-                            app_ui.update = UpdateState::Wait;
-                        }
-                        StoryEvent::Pause => {
-                            app_ui.input_mode = InputMode::Pause;
-                            app_ui.update = UpdateState::Wait;
-                        }
-                        StoryEvent::Clear => {
-                            app_ui.output.clear();
-                        }
+                Some(event) => match event {
+                    StoryEvent::Text(t) => {
+                        app_ui.current_response = t.clone();
+                        app_ui.input_mode = InputMode::Disabled;
+                        app_ui.update = UpdateState::Responding;
                     }
-                }
+                    StoryEvent::Input(_) => {
+                        app_ui.input_mode = InputMode::Input;
+                        app_ui.update = UpdateState::Wait;
+                    }
+                    StoryEvent::Pause => {
+                        app_ui.input_mode = InputMode::Pause;
+                        app_ui.update = UpdateState::Wait;
+                    }
+                    StoryEvent::Clear => {
+                        app_ui.output.clear();
+                    }
+                },
                 None => {
                     return Ok(());
                 }
             },
 
             UpdateState::HandleInput => {
-                app_data.game_store
+                app_data
+                    .game_store
                     .insert(app_ui.label.clone(), app_ui.input.drain(..).collect());
                 app_ui.update = UpdateState::Update;
             }
@@ -171,7 +170,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app_ui: AppUI, mut app_da
 }
 
 #[allow(clippy::cast_possible_truncation)]
-fn ui<B: Backend>(f: &mut Frame<B>, app: &AppUI) {
+fn ui<B: Backend>(f: &mut Frame<B>, app: &AppUi) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)].as_ref())
@@ -186,11 +185,11 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &AppUI) {
         })
         .block(Block::default());
     f.render_widget(paragraph, chunks[1]);
+
     match app.input_mode {
         InputMode::Input => f.set_cursor(chunks[1].x + 2 + app.input.width() as u16, chunks[1].y),
         _ => {}
     }
-
 
     let current = app.current_response[0..app.response_progress].to_owned();
     let output = List::new(

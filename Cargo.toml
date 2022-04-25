@@ -10,3 +10,7 @@ crossterm = "0.23.2"
 peg = "0.8.0"
 tui = "0.17.0"
 unicode-width = "0.1.9"
+
+[[bin]]
+name = "text_adventure_tui"
+path = "src/tui_client.rs"

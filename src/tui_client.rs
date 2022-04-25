@@ -1,34 +1,37 @@
+#![warn(clippy::all, clippy::pedantic)]
+
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{collections::HashMap, error::Error, io, iter::{self, Extend}, time::Duration};
+use std::{
+    error::Error,
+    io,
+    iter,
+    time::Duration,
+};
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    text::{Span, Spans, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    style::{Color, Style},
+    text::{Span, Spans},
+    widgets::{Block, List, ListItem, Paragraph},
     Frame, Terminal,
 };
 use unicode_width::UnicodeWidthStr;
 
-mod parser;
-use parser::story_parser;
+use text_adventure::{StoryEvent, AppData};
 
 enum InputMode {
     Disabled,
     Input,
     Pause,
 }
-
-#[derive(Debug)]
-pub enum StoryEvent {
-    Text(String),
-    Input(String),
-    Pause,
-    Clear,
+impl Default for InputMode {
+    fn default() -> Self {
+        Self::Disabled
+    }
 }
 
 enum UpdateState {
@@ -37,39 +40,23 @@ enum UpdateState {
     HandleInput,
     Responding,
 }
+impl Default for UpdateState {
+    fn default() -> Self {
+        Self::Update
+    }
+}
 
-struct App {
-    story: Vec<StoryEvent>,
-    position: usize,
+#[derive(Default)]
+struct AppUI {
     input: String,
     input_mode: InputMode,
     output: Vec<String>,
     current_response: String,
     response_progress: usize,
-    game_store: HashMap<String, String>,
     update: UpdateState,
     label: String,
 }
 
-impl Default for App {
-    fn default() -> App {
-        let text = include_str!("../story/entry.story");
-        let story = story_parser::story(&text).unwrap();
-
-        App {
-            story,
-            position: 0,
-            input: String::new(),
-            output: Vec::new(),
-            response_progress: 0,
-            current_response: String::new(),
-            input_mode: InputMode::Disabled,
-            game_store: HashMap::new(),
-            update: UpdateState::Update,
-            label: "".into(),
-        }
-    }
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     // setup terminal
@@ -80,8 +67,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     // create app and run it
-    let app = App::default();
-    let res = run_app(&mut terminal, app);
+    let app_data = AppData::default();
+    let app_ui = AppUI::default();
+    let res = run_app(&mut terminal, app_ui, app_data);
 
     // restore terminal
     disable_raw_mode()?;
@@ -93,36 +81,35 @@ fn main() -> Result<(), Box<dyn Error>> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        println!("{:?}", err)
+        eprintln!("{:?}", err);
     }
 
     Ok(())
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
+fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app_ui: AppUI, mut app_data: AppData) -> io::Result<()> {
     loop {
-        match app.update {
-            UpdateState::Update => match app.story.get(app.position) {
+        match app_ui.update {
+            UpdateState::Update => match app_data.story.pop_front() {
                 Some(event) => {
                     match event {
                         StoryEvent::Text(t) => {
-                            app.current_response = t.to_owned();
-                            app.input_mode = InputMode::Disabled;
-                            app.update = UpdateState::Responding;
+                            app_ui.current_response = t.clone();
+                            app_ui.input_mode = InputMode::Disabled;
+                            app_ui.update = UpdateState::Responding;
                         }
                         StoryEvent::Input(_) => {
-                            app.input_mode = InputMode::Input;
-                            app.update = UpdateState::Wait;
+                            app_ui.input_mode = InputMode::Input;
+                            app_ui.update = UpdateState::Wait;
                         }
                         StoryEvent::Pause => {
-                            app.input_mode = InputMode::Pause;
-                            app.update = UpdateState::Wait;
+                            app_ui.input_mode = InputMode::Pause;
+                            app_ui.update = UpdateState::Wait;
                         }
                         StoryEvent::Clear => {
-                            app.output.clear();
+                            app_ui.output.clear();
                         }
                     }
-                    app.position += 1;
                 }
                 None => {
                     return Ok(());
@@ -130,26 +117,26 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
             },
 
             UpdateState::HandleInput => {
-                app.game_store
-                    .insert(app.label.clone(), app.input.drain(..).collect());
-                app.update = UpdateState::Update;
+                app_data.game_store
+                    .insert(app_ui.label.clone(), app_ui.input.drain(..).collect());
+                app_ui.update = UpdateState::Update;
             }
 
             UpdateState::Responding => {
-                if app.response_progress == app.current_response.len() {
-                    app.output.push(app.current_response.clone());
-                    app.response_progress = 0;
-                    app.update = UpdateState::Update;
+                if app_ui.response_progress == app_ui.current_response.len() {
+                    app_ui.output.push(app_ui.current_response.clone());
+                    app_ui.response_progress = 0;
+                    app_ui.update = UpdateState::Update;
                 } else {
                     // FIX: No time control for responses; one char every frame
-                    app.response_progress += 1;
+                    app_ui.response_progress += 1;
                 }
             }
 
             UpdateState::Wait => {}
         }
 
-        terminal.draw(|f| ui(f, &app))?;
+        terminal.draw(|f| ui(f, &app_ui))?;
 
         if event::poll(Duration::ZERO)? {
             if let Event::Key(key) = event::read()? {
@@ -157,17 +144,17 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                     return Ok(());
                 }
 
-                match app.input_mode {
+                match app_ui.input_mode {
                     InputMode::Input => match key.code {
                         KeyCode::Enter => {
-                            app.input_mode = InputMode::Disabled;
-                            app.update = UpdateState::HandleInput;
+                            app_ui.input_mode = InputMode::Disabled;
+                            app_ui.update = UpdateState::HandleInput;
                         }
                         KeyCode::Char(c) => {
-                            app.input.push(c);
+                            app_ui.input.push(c);
                         }
                         KeyCode::Backspace => {
-                            app.input.pop();
+                            app_ui.input.pop();
                         }
                         _ => {}
                     },
@@ -175,7 +162,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                         _ => {}
                     },
                     InputMode::Pause => {
-                        app.update = UpdateState::Update;
+                        app_ui.update = UpdateState::Update;
                     }
                 }
             }
@@ -183,7 +170,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
     }
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
+#[allow(clippy::cast_possible_truncation)]
+fn ui<B: Backend>(f: &mut Frame<B>, app: &AppUI) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)].as_ref())
@@ -203,15 +191,14 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         _ => {}
     }
 
+
     let current = app.current_response[0..app.response_progress].to_owned();
     let output = List::new(
         app.output
             .iter()
-            .chain(
-                iter::once(&current)
-            )
+            .chain(iter::once(&current))
             .map(|t| ListItem::new(t.as_ref()))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>(),
     );
 
     f.render_widget(output, chunks[0]);

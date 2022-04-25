@@ -176,13 +176,23 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &AppUi) {
         .constraints([Constraint::Min(1), Constraint::Length(1)].as_ref())
         .split(f.size());
 
-    let text = vec![Spans::from(vec![Span::raw("> "), Span::raw(&app.input)])];
+    let (content, style) = match app.input_mode {
+        InputMode::Disabled => (
+            Span::raw("..."),
+            Style::default(),
+        ),
+        InputMode::Input => (
+            Span::raw(&app.input),
+            Style::default().fg(Color::Yellow),
+        ),
+        InputMode::Pause => (
+            Span::raw("Press any key to continue."),
+            Style::default().fg(Color::Green),
+        ),
+    };
+    let text = Spans::from(vec![Span::raw("> "), content]);
     let paragraph = Paragraph::new(text)
-        .style(match app.input_mode {
-            InputMode::Disabled => Style::default(),
-            InputMode::Input => Style::default().fg(Color::Yellow),
-            InputMode::Pause => Style::default().fg(Color::Green),
-        })
+        .style(style)
         .block(Block::default());
     f.render_widget(paragraph, chunks[1]);
 

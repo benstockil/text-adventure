@@ -5,7 +5,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{error::Error, io, iter, time::Duration};
+use std::{error::Error, io, iter, mem, time::Duration};
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
@@ -93,7 +93,7 @@ fn run_app<B: Backend>(
             UpdateState::Update => match app_data.story.pop_front() {
                 Some(event) => match event {
                     StoryEvent::Text(t) => {
-                        app_ui.current_response = t.clone();
+                        app_ui.current_response = t;
                         app_ui.input_mode = InputMode::Disabled;
                         app_ui.update = UpdateState::Responding;
                     }
@@ -117,13 +117,16 @@ fn run_app<B: Backend>(
             UpdateState::HandleInput => {
                 app_data
                     .game_store
-                    .insert(app_ui.label.clone(), app_ui.input.drain(..).collect());
+                    .insert(
+                        mem::take(&mut app_ui.label),
+                        mem::take(&mut app_ui.input),
+                    );
                 app_ui.update = UpdateState::Update;
             }
 
             UpdateState::Responding => {
                 if app_ui.response_progress == app_ui.current_response.len() {
-                    app_ui.output.push(app_ui.current_response.clone());
+                    app_ui.output.push(mem::take(&mut app_ui.current_response));
                     app_ui.response_progress = 0;
                     app_ui.update = UpdateState::Update;
                 } else {
@@ -201,12 +204,12 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &AppUi) {
         _ => {}
     }
 
-    let current = app.current_response[0..app.response_progress].to_owned();
+    let current = &app.current_response[0..app.response_progress];
     let output = List::new(
         app.output
             .iter()
-            .chain(iter::once(&current))
-            .map(|t| ListItem::new(t.as_ref()))
+            .map(|t| ListItem::new(t.as_str()))
+            .chain(iter::once(ListItem::new(current)))
             .collect::<Vec<_>>(),
     );
 

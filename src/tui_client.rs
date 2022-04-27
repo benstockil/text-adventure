@@ -9,7 +9,7 @@ use std::{error::Error, io, iter, mem, time::{Duration, Instant}};
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
+    style::{Color, Style, Modifier},
     text::{Span, Spans},
     widgets::{Block, List, ListItem, Paragraph},
     Frame, Terminal,
@@ -207,7 +207,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &AppUi) {
         ),
         InputMode::Pause => (
             Span::raw("Press any key to continue."),
-            Style::default().fg(Color::Green),
+            Style::default().fg(Color::Green).add_modifier(Modifier::ITALIC)
         ),
     };
     let text = Spans::from(vec![Span::raw("> "), content]);

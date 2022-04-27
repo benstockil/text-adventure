@@ -4,6 +4,7 @@ use crate::parser::story_parser::story;
 use std::collections::{HashMap, VecDeque};
 
 pub mod parser;
+pub mod text;
 
 #[derive(Debug)]
 pub enum StoryEvent {

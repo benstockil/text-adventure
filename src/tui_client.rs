@@ -5,7 +5,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{error::Error, io, iter, mem, time::Duration};
+use std::{error::Error, io, iter, mem, time::{Duration, Instant}};
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
@@ -43,15 +43,31 @@ impl Default for UpdateState {
     }
 }
 
-#[derive(Default)]
 struct AppUi {
     input: String,
     input_mode: InputMode,
     output: Vec<String>,
     current_response: String,
+    response_time: Instant,
     response_progress: usize,
     update: UpdateState,
     label: String,
+}
+
+impl Default for AppUi {
+    fn default() -> Self {
+        Self {
+            input: String::default(),
+            input_mode: InputMode::default(),
+            output: Vec::default(),
+            current_response: String::default(),
+            // HACK: Unnecessary system call
+            response_time: Instant::now(),
+            response_progress: usize::default(),
+            update: UpdateState::default(),
+            label: String::default(),
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -94,6 +110,7 @@ fn run_app<B: Backend>(
                 Some(event) => match event {
                     StoryEvent::Text(t) => {
                         app_ui.current_response = t;
+                        app_ui.response_time = Instant::now();
                         app_ui.input_mode = InputMode::Disabled;
                         app_ui.update = UpdateState::Responding;
                     }
@@ -125,13 +142,13 @@ fn run_app<B: Backend>(
             }
 
             UpdateState::Responding => {
-                if app_ui.response_progress == app_ui.current_response.len() {
+                let progress = app_ui.response_time.elapsed().as_millis() as usize / 10;
+                if progress >= app_ui.current_response.len() {
                     app_ui.output.push(mem::take(&mut app_ui.current_response));
-                    app_ui.response_progress = 0;
                     app_ui.update = UpdateState::Update;
+                    app_ui.response_progress = 0;
                 } else {
-                    // FIX: No time control for responses; one char every frame
-                    app_ui.response_progress += 1;
+                    app_ui.response_progress = progress;
                 }
             }
 
